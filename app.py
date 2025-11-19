@@ -42,7 +42,7 @@ if picture:
     if st.button("⚡ Zinc-It (Save to Sheet)", type="primary"):
         with st.spinner("Galvanizing & Extracting VAT..."):
             try:
-                # Updated Prompt: Explicitly asks for VAT
+                # --- THE PROMPT BLOCK ---
                 prompt = """
                 Analyze this UK receipt. Extract strictly as JSON: 
                 {
@@ -53,24 +53,24 @@ if picture:
                     "category": "string", 
                     "summary": "string"
                 }
-                
                 Rules:
                 1. Look for 'VAT' or 'Tax' amount explicitly.
                 2. If you see the word 'VAT' but no separate amount, calculate it as (Total / 6).
-                3. If strictly no VAT is mentioned (e.g. train ticket), set vat to 0.00.
-                """
+                3. If strictly no VAT is mentioned, set vat to 0.00.
+                """ 
+                # ^^^ MAKE SURE THOSE 3 QUOTES ABOVE ARE THERE! ^^^
                 
                 response = model.generate_content([prompt, img])
                 text = response.text.replace("```json", "").replace("```", "")
                 data = json.loads(text)
                 
-                # Save to Sheet (Now including VAT in Column E)
+                # Save to Sheet
                 row = [
                     data.get("date", ""),
                     data.get("merchant", "Unknown"),
                     data.get("category", "Expense"),
                     data.get("total", 0.00),
-                    data.get("vat", 0.00),  # <--- The Fix!
+                    data.get("vat", 0.00),
                     data.get("summary", "")
                 ]
                 
@@ -87,4 +87,6 @@ with st.expander("🛠️ Connection Diagnostics"):
     if st.button("Test Sheet Connection"):
         try:
             sheet.append_row(["TEST", "VAT Check", "Admin", "120.00", "20.00", "System OK"])
-            st.success("✅ Test
+            st.success("✅ Test Sent. Check sheet for £20.00 VAT.")
+        except Exception as e:
+            st.error(f"Write Failed: {e}")
