@@ -10,43 +10,22 @@ from oauth2client.service_account import ServiceAccountCredentials
 st.set_page_config(page_title="Zinct | Financial Protection", page_icon="⚡")
 st.title("⚡ Zinct")
 
-# --- 1. AUTHENTICATION (The Blob Method) ---
+# --- AUTHENTICATION ---
 try:
-    # API Key
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
     
-    # Google Sheets (Reading the Big Blob)
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    
-    # Grab the JSON blob string
     json_blob = st.secrets["GCP_JSON"]
-    # Turn it back into a dictionary
     creds_dict = json.loads(json_blob)
-    
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
-    
-    # Try to open the sheet
     sheet = client.open("Zinct Ledger").sheet1
-    
 except Exception as e:
     st.error(f"⚠️ Setup Error: {e}")
     st.stop()
 
-# --- 2. CONNECTION TESTER (Click this first!) ---
-with st.expander("🛠️ Connection Diagnostics"):
-    if st.button("Test Sheet Connection"):
-        try:
-            st.info(f"Attempting to write to: {sheet.title}")
-            sheet.append_row(["TEST", "Connection Check", "Admin", "0.00", "0.00", "System OK"])
-            st.success("✅ Connection Successful! Check your Google Sheet now.")
-        except Exception as e:
-            st.error(f"❌ Write Failed: {e}")
-            st.warning("Did you share the sheet with the right email?")
-            st.code(creds_dict.get("client_email", "Unknown Email"))
-
-# --- 3. AI MODEL SELECTOR ---
+# --- MODEL SELECTOR ---
 try:
     all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
     active_model_name = next((m for m in all_models if 'flash' in m), "models/gemini-1.5-flash")
@@ -55,35 +34,57 @@ except:
 
 model = genai.GenerativeModel(active_model_name)
 
-# --- 4. MAIN SCANNER ---
+# --- MAIN SCANNER ---
 picture = st.camera_input("Scan Receipt")
 
 if picture:
     img = Image.open(picture)
     if st.button("⚡ Zinc-It (Save to Sheet)", type="primary"):
-        with st.spinner("Galvanizing..."):
+        with st.spinner("Galvanizing & Extracting VAT..."):
             try:
+                # Updated Prompt: Explicitly asks for VAT
                 prompt = """
-                Extract strictly as JSON: 
-                {"merchant": "string", "date": "YYYY-MM-DD", "total": 0.00, "category": "string", "summary": "string"}
-                from this receipt image.
+                Analyze this UK receipt. Extract strictly as JSON: 
+                {
+                    "merchant": "string", 
+                    "date": "YYYY-MM-DD", 
+                    "total": 0.00, 
+                    "vat": 0.00, 
+                    "category": "string", 
+                    "summary": "string"
+                }
+                
+                Rules:
+                1. Look for 'VAT' or 'Tax' amount explicitly.
+                2. If you see the word 'VAT' but no separate amount, calculate it as (Total / 6).
+                3. If strictly no VAT is mentioned (e.g. train ticket), set vat to 0.00.
                 """
+                
                 response = model.generate_content([prompt, img])
                 text = response.text.replace("```json", "").replace("```", "")
                 data = json.loads(text)
                 
-                # Save to Sheet
+                # Save to Sheet (Now including VAT in Column E)
                 row = [
                     data.get("date", ""),
                     data.get("merchant", "Unknown"),
                     data.get("category", "Expense"),
                     data.get("total", 0.00),
-                    0.00, # VAT placeholder
+                    data.get("vat", 0.00),  # <--- The Fix!
                     data.get("summary", "")
                 ]
+                
                 sheet.append_row(row)
+                
                 st.balloons()
-                st.success(f"Saved £{data.get('total')} to Cloud!")
+                st.success(f"✅ Saved £{data.get('total')} (VAT: £{data.get('vat')})")
                 
             except Exception as e:
                 st.error(f"Scan Failed: {e}")
+
+# --- FOOTER ---
+with st.expander("🛠️ Connection Diagnostics"):
+    if st.button("Test Sheet Connection"):
+        try:
+            sheet.append_row(["TEST", "VAT Check", "Admin", "120.00", "20.00", "System OK"])
+            st.success("✅ Test
