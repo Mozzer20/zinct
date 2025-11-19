@@ -6,7 +6,7 @@ import json
 import os
 
 # --- CONFIG ---
-st.set_page_config(page_title="Zinct | System Check", page_icon="⚡")
+st.set_page_config(page_title="Zinct | Financial Protection", page_icon="⚡")
 st.title("⚡ Zinct")
 
 # --- AUTH ---
@@ -18,35 +18,64 @@ except:
 
 genai.configure(api_key=api_key)
 
-# --- THE DIAGNOSTIC BUTTON ---
-with st.expander("🛠️ Zinct Diagnostics (Click here if failing)"):
-    if st.button("Run System Check"):
-        st.write("Checking Google Connection...")
-        try:
-            # This asks Google for a list of ALL available models for your key
-            st.write("Available Models:")
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    st.code(m.name)
-            st.success("Connection is GOOD. Use one of the names above.")
-        except Exception as e:
-            st.error(f"Connection Refused: {e}")
+# --- SMART MODEL SELECTOR (The Fix) ---
+# We ask Google what is available and pick the best one automatically.
+try:
+    # Get list of all models
+    all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    
+    # Try to find a 'flash' model first (it's the fastest)
+    active_model_name = next((m for m in all_models if 'flash' in m), None)
+    
+    # If no flash, grab the first available one
+    if not active_model_name:
+        active_model_name = all_models[0]
+        
+    st.success(f"✅ Connected to Zinct Core: {active_model_name}")
+    
+except Exception as e:
+    st.error(f"Could not auto-select model: {e}")
+    st.stop()
+
+# Initialize the model with the name we just found
+model = genai.GenerativeModel(active_model_name)
+
 
 # --- MAIN APP ---
-# We will try the safest model first
-model_name = 'models/gemini-1.5-flash' 
-model = genai.GenerativeModel(model_name)
-
 picture = st.camera_input("Capture Receipt")
 
 if picture:
     img = Image.open(picture)
+    st.image(img, caption="Receipt Scanned", width=300)
     
-    if st.button("⚡ Zinc-It"):
-        try:
-            prompt = "Extract merchant, date, total amount from this receipt as JSON."
-            response = model.generate_content([prompt, img])
-            st.write(response.text)
-        except Exception as e:
-            st.error(f"Error with {model_name}: {e}")
-            st.info("👇 Open 'Zinct Diagnostics' above to see valid model names.")
+    if st.button("⚡ Zinc-It (Extract Data)", type="primary"):
+        with st.spinner("Galvanizing data..."):
+            try:
+                prompt = """
+                Analyze this receipt. Extract the following strictly as JSON:
+                {
+                    "merchant": "Name of store",
+                    "date": "YYYY-MM-DD",
+                    "total": "0.00",
+                    "category": "Category (Materials, Fuel, etc)",
+                    "summary": "Short description"
+                }
+                """
+                
+                response = model.generate_content([prompt, img])
+                
+                # Clean JSON result
+                json_text = response.text.replace("```json", "").replace("```", "")
+                data = json.loads(json_text)
+                
+                # Show Results
+                st.balloons()
+                st.subheader("📝 Galvanized Entry")
+                st.json(data)
+                
+            except Exception as e:
+                st.error(f"Scan Failed: {e}")
+
+# --- FOOTER ---
+st.markdown("---")
+st.caption("© 2025 Zinct Financial Ltd")
