@@ -27,8 +27,7 @@ except:
 
 # Configure the AI immediately
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-1.5-flash-001')
-
+model = genai.GenerativeModel('gemini-pro-vision')
 # --- 4. SIDEBAR INFO ---
 with st.sidebar:
     st.success("🔓 Zinct Core: ACTIVE")
